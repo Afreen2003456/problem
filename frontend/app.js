@@ -1,80 +1,69 @@
-// Airline Data Insights - Frontend JavaScript
+// Airline Analytics Dashboard - JavaScript
 const API_BASE_URL = 'http://localhost:8000';
 
 // Global variables
-let priceChart, marketShareChart, routeChart;
-let currentFlights = [];
-let allRoutes = [];
+let priceChart, routeChart, airlineChart;
+let currentFlightData = [];
+let dashboardStats = {
+    totalFlights: 300,
+    uniqueRoutes: 10,
+    airlines: 10,
+    airports: 10
+};
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
-    initializeApp();
+    initializeDashboard();
     setupEventListeners();
     loadInitialData();
 });
 
-// Initialize the application
-function initializeApp() {
-    // Set default date to today
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('date').value = today;
-    
+// Initialize the dashboard
+function initializeDashboard() {
     // Initialize charts
     initializeCharts();
     
-    // Load initial data
-    loadPopularRoutes();
-    loadAIInsights();
+    // Update initial statistics
+    updateStatistics();
+    
+    // Load sample data
+    loadSampleData();
 }
 
 // Setup event listeners
 function setupEventListeners() {
-    // Flight search form
-    document.getElementById('flightSearchForm').addEventListener('submit', handleFlightSearch);
+    // Filter buttons
+    document.getElementById('loadDataBtn').addEventListener('click', loadFilteredData);
+    document.getElementById('clearFiltersBtn').addEventListener('click', clearFilters);
     
-    // Clear filters button
-    document.getElementById('clearFilters').addEventListener('click', clearFilters);
+    // Table actions
+    document.getElementById('exportBtn').addEventListener('click', exportData);
+    document.getElementById('refreshBtn').addEventListener('click', refreshData);
     
-    // Sort functionality
-    document.getElementById('sortBy').addEventListener('change', sortFlights);
-    
-    // Smooth scrolling for navigation links
-    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-        anchor.addEventListener('click', function (e) {
+    // Navigation links
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.addEventListener('click', function(e) {
             e.preventDefault();
-            const target = document.querySelector(this.getAttribute('href'));
-            if (target) {
-                target.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'start'
-                });
-            }
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            this.classList.add('active');
         });
     });
 }
 
-// Handle flight search
-async function handleFlightSearch(e) {
-    e.preventDefault();
+// Load filtered data based on user input
+async function loadFilteredData() {
+    const fromAirport = document.getElementById('fromAirport').value;
+    const toAirport = document.getElementById('toAirport').value;
+    const dataLimit = document.getElementById('dataLimit').value;
     
-    const formData = new FormData(e.target);
-    const searchParams = {
-        origin: formData.get('origin'),
-        destination: formData.get('destination'),
-        date: formData.get('date'),
-        min_price: formData.get('minPrice') || undefined,
-        max_price: formData.get('maxPrice') || undefined,
-        airline: formData.get('airline') || undefined
-    };
-    
-    // Remove undefined values
-    Object.keys(searchParams).forEach(key => 
-        searchParams[key] === undefined && delete searchParams[key]
-    );
-    
-    showLoadingState('flightResults');
+    showLoading();
     
     try {
+        // Simulate API call with filters
+        const searchParams = {};
+        if (fromAirport) searchParams.origin = fromAirport.toUpperCase();
+        if (toAirport) searchParams.destination = toAirport.toUpperCase();
+        
         const response = await fetch(`${API_BASE_URL}/flights/search`, {
             method: 'POST',
             headers: {
@@ -83,197 +72,169 @@ async function handleFlightSearch(e) {
             body: JSON.stringify(searchParams)
         });
         
-        if (!response.ok) {
-            throw new Error('Failed to search flights');
+        if (response.ok) {
+            const data = await response.json();
+            currentFlightData = data.flights?.slice(0, parseInt(dataLimit)) || [];
+        } else {
+            // Use sample data if API fails
+            currentFlightData = generateSampleData(parseInt(dataLimit), fromAirport, toAirport);
         }
         
-        const data = await response.json();
-        currentFlights = data.flights || [];
-        displayFlights(currentFlights);
-        
-        // Update charts with new data
-        updatePriceChart(currentFlights);
+        updateDashboard();
+        hideLoading();
         
     } catch (error) {
-        console.error('Error searching flights:', error);
-        showErrorState('flightResults', 'Failed to search flights. Please try again.');
+        console.error('Error loading data:', error);
+        // Use sample data as fallback
+        currentFlightData = generateSampleData(parseInt(dataLimit), fromAirport, toAirport);
+        updateDashboard();
+        hideLoading();
     }
 }
 
-// Display flights
-function displayFlights(flights) {
-    const container = document.getElementById('flightResults');
+// Generate sample data for demonstration
+function generateSampleData(limit = 50, origin = '', destination = '') {
+    const airlines = ['American Airlines', 'Delta Air Lines', 'United Airlines', 'Southwest Airlines', 'JetBlue Airways', 'Alaska Airlines', 'Spirit Airlines', 'Frontier Airlines'];
+    const airports = ['JFK', 'LAX', 'ORD', 'DFW', 'DEN', 'SFO', 'LAS', 'MIA', 'BOS', 'SEA', 'ATL', 'PHX', 'LGA', 'EWR', 'IAD', 'DCA'];
+    const statuses = ['On Time', 'Delayed', 'Boarding', 'Departed'];
     
-    if (!flights || flights.length === 0) {
-        container.innerHTML = `
-            <div class="text-center py-5">
-                <i class="fas fa-search fa-3x text-muted mb-3"></i>
-                <h5>No flights found</h5>
-                <p class="text-muted">Try adjusting your search criteria</p>
-            </div>
-        `;
-        return;
+    const flights = [];
+    
+    for (let i = 0; i < limit; i++) {
+        const fromAirport = origin || airports[Math.floor(Math.random() * airports.length)];
+        const toAirport = destination || airports.filter(a => a !== fromAirport)[Math.floor(Math.random() * (airports.length - 1))];
+        const airline = airlines[Math.floor(Math.random() * airlines.length)];
+        const price = Math.floor(Math.random() * 800) + 200;
+        const flightNumber = airline.split(' ')[0].substring(0, 2).toUpperCase() + Math.floor(Math.random() * 9000 + 1000);
+        
+        // Generate realistic times
+        const departureHour = Math.floor(Math.random() * 24);
+        const departureMinute = Math.floor(Math.random() * 60);
+        const flightDuration = Math.floor(Math.random() * 6) + 1; // 1-6 hours
+        const arrivalHour = (departureHour + flightDuration) % 24;
+        const arrivalMinute = (departureMinute + Math.floor(Math.random() * 60)) % 60;
+        
+        flights.push({
+            flight_number: flightNumber,
+            airline: airline,
+            origin: fromAirport,
+            destination: toAirport,
+            route: `${fromAirport}-${toAirport}`,
+            departure_time: `${departureHour.toString().padStart(2, '0')}:${departureMinute.toString().padStart(2, '0')}`,
+            arrival_time: `${arrivalHour.toString().padStart(2, '0')}:${arrivalMinute.toString().padStart(2, '0')}`,
+            price: price,
+            duration: `${flightDuration}h ${Math.floor(Math.random() * 60)}m`,
+            status: statuses[Math.floor(Math.random() * statuses.length)],
+            date: new Date().toISOString().split('T')[0]
+        });
     }
     
-    container.innerHTML = flights.map(flight => `
-        <div class="flight-card fade-in">
-            <div class="flight-header">
-                <div class="d-flex align-items-center">
-                    <div class="airline-logo bg-primary text-white d-flex align-items-center justify-content-center">
-                        ${flight.airline.charAt(0)}
-                    </div>
-                    <div>
-                        <div class="flight-route">${flight.origin} → ${flight.destination}</div>
-                        <div class="text-muted">${flight.airline}</div>
-                    </div>
-                </div>
-                <div class="flight-price">$${flight.price}</div>
-            </div>
-            <div class="flight-details">
-                <div class="flight-detail">
-                    <i class="fas fa-clock"></i>
-                    <span>Duration: ${flight.duration}</span>
-                </div>
-                <div class="flight-detail">
-                    <i class="fas fa-plane-departure"></i>
-                    <span>Departure: ${flight.departure_time}</span>
-                </div>
-                <div class="flight-detail">
-                    <i class="fas fa-plane-arrival"></i>
-                    <span>Arrival: ${flight.arrival_time}</span>
-                </div>
-                <div class="flight-detail">
-                    <i class="fas fa-calendar"></i>
-                    <span>Date: ${flight.date}</span>
-                </div>
-            </div>
-        </div>
-    `).join('');
+    return flights;
 }
 
-// Sort flights
-function sortFlights() {
-    const sortBy = document.getElementById('sortBy').value;
+// Update dashboard with new data
+function updateDashboard() {
+    updateStatistics();
+    updateCharts();
+    updateFlightTable();
+    updateTopRoutes();
+}
+
+// Update statistics cards
+function updateStatistics() {
+    const totalFlights = currentFlightData.length || dashboardStats.totalFlights;
+    const uniqueRoutes = new Set(currentFlightData.map(f => f.route)).size || dashboardStats.uniqueRoutes;
+    const airlines = new Set(currentFlightData.map(f => f.airline)).size || dashboardStats.airlines;
+    const airports = new Set(currentFlightData.flatMap(f => [f.origin, f.destination])).size || dashboardStats.airports;
     
-    if (!currentFlights || currentFlights.length === 0) return;
+    document.getElementById('totalFlights').textContent = totalFlights;
+    document.getElementById('uniqueRoutes').textContent = uniqueRoutes;
+    document.getElementById('totalAirlines').textContent = airlines;
+    document.getElementById('totalAirports').textContent = airports;
     
-    const sortedFlights = [...currentFlights].sort((a, b) => {
-        switch (sortBy) {
-            case 'price':
-                return parseFloat(a.price) - parseFloat(b.price);
-            case 'duration':
-                return parseDuration(a.duration) - parseDuration(b.duration);
-            case 'departure':
-                return a.departure_time.localeCompare(b.departure_time);
-            default:
-                return 0;
-        }
+    // Add animation
+    document.querySelectorAll('.stat-card').forEach(card => {
+        card.classList.add('fade-in');
     });
-    
-    displayFlights(sortedFlights);
-}
-
-// Parse duration string to minutes
-function parseDuration(duration) {
-    const matches = duration.match(/(\d+)h\s*(\d+)m/);
-    if (matches) {
-        return parseInt(matches[1]) * 60 + parseInt(matches[2]);
-    }
-    return 0;
-}
-
-// Clear filters
-function clearFilters() {
-    document.getElementById('flightSearchForm').reset();
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('date').value = today;
-    
-    // Clear results
-    document.getElementById('flightResults').innerHTML = `
-        <div class="text-center">
-            <i class="fas fa-plane fa-2x text-muted mb-3"></i>
-            <p>Search for flights to see results</p>
-        </div>
-    `;
-    
-    currentFlights = [];
-}
-
-// Load popular routes
-async function loadPopularRoutes() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/routes/popular`);
-        if (!response.ok) throw new Error('Failed to load popular routes');
-        
-        const data = await response.json();
-        allRoutes = data.routes || [];
-        displayPopularRoutes(allRoutes);
-        
-    } catch (error) {
-        console.error('Error loading popular routes:', error);
-        showErrorState('popularRoutes', 'Failed to load popular routes');
-    }
-}
-
-// Display popular routes
-function displayPopularRoutes(routes) {
-    const container = document.getElementById('popularRoutes');
-    
-    if (!routes || routes.length === 0) {
-        container.innerHTML = '<p class="text-muted">No popular routes data available</p>';
-        return;
-    }
-    
-    container.innerHTML = routes.map(route => `
-        <div class="route-item">
-            <div class="route-info">
-                <div class="route-name">${route.route}</div>
-                <div class="route-stats">
-                    ${route.flights} flights • Avg: $${route.avg_price}
-                </div>
-            </div>
-            <div class="route-badge">
-                ${route.popularity}% popular
-            </div>
-        </div>
-    `).join('');
-}
-
-// Load AI insights
-async function loadAIInsights() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/insights/generate`);
-        if (!response.ok) throw new Error('Failed to load AI insights');
-        
-        const data = await response.json();
-        displayAIInsights(data.insights || []);
-        
-    } catch (error) {
-        console.error('Error loading AI insights:', error);
-        showErrorState('aiInsights', 'Failed to generate AI insights');
-    }
-}
-
-// Display AI insights
-function displayAIInsights(insights) {
-    const container = document.getElementById('aiInsights');
-    
-    if (!insights || insights.length === 0) {
-        container.innerHTML = '<p class="text-muted">No AI insights available</p>';
-        return;
-    }
-    
-    container.innerHTML = insights.map(insight => `
-        <div class="insight-item">
-            <div class="insight-title">${insight.title}</div>
-            <div class="insight-text">${insight.description}</div>
-        </div>
-    `).join('');
 }
 
 // Initialize charts
 function initializeCharts() {
-    // Price trends chart
+    // Route Chart
+    const routeCtx = document.getElementById('routeChart').getContext('2d');
+    routeChart = new Chart(routeCtx, {
+        type: 'bar',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Flights',
+                data: [],
+                backgroundColor: 'rgba(99, 102, 241, 0.8)',
+                borderColor: 'rgba(99, 102, 241, 1)',
+                borderWidth: 1,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.1)'
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    }
+                }
+            }
+        }
+    });
+    
+    // Airline Chart
+    const airlineCtx = document.getElementById('airlineChart').getContext('2d');
+    airlineChart = new Chart(airlineCtx, {
+        type: 'doughnut',
+        data: {
+            labels: [],
+            datasets: [{
+                data: [],
+                backgroundColor: [
+                    '#6366f1',
+                    '#8b5cf6',
+                    '#3b82f6',
+                    '#10b981',
+                    '#f59e0b',
+                    '#ef4444',
+                    '#6b7280',
+                    '#ec4899'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 20,
+                        usePointStyle: true
+                    }
+                }
+            }
+        }
+    });
+    
+    // Price Chart
     const priceCtx = document.getElementById('priceChart').getContext('2d');
     priceChart = new Chart(priceCtx, {
         type: 'line',
@@ -282,8 +243,8 @@ function initializeCharts() {
             datasets: [{
                 label: 'Average Price',
                 data: [],
-                borderColor: '#0d6efd',
-                backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                borderColor: '#6366f1',
+                backgroundColor: 'rgba(99, 102, 241, 0.1)',
                 tension: 0.4,
                 fill: true
             }]
@@ -303,171 +264,309 @@ function initializeCharts() {
                         callback: function(value) {
                             return '$' + value;
                         }
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.1)'
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
                     }
                 }
             }
         }
     });
-    
-    // Market share chart
-    const marketCtx = document.getElementById('marketShareChart').getContext('2d');
-    marketShareChart = new Chart(marketCtx, {
-        type: 'doughnut',
-        data: {
-            labels: ['American Airlines', 'Delta Air Lines', 'United Airlines', 'Southwest Airlines', 'Others'],
-            datasets: [{
-                data: [25, 20, 18, 15, 22],
-                backgroundColor: [
-                    '#0d6efd',
-                    '#198754',
-                    '#ffc107',
-                    '#dc3545',
-                    '#6c757d'
-                ]
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'bottom'
-                }
-            }
-        }
-    });
-    
-    // Route popularity chart
-    const routeCtx = document.getElementById('routeChart').getContext('2d');
-    routeChart = new Chart(routeCtx, {
-        type: 'bar',
-        data: {
-            labels: ['JFK-LAX', 'NYC-MIA', 'CHI-LAS', 'DFW-DEN', 'BOS-SFO'],
-            datasets: [{
-                label: 'Flights per Day',
-                data: [45, 38, 32, 28, 25],
-                backgroundColor: '#0d6efd',
-                borderRadius: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true
-                }
-            }
-        }
-    });
-    
-    // Load initial chart data
-    loadInitialData();
 }
 
-// Load initial data for charts
-async function loadInitialData() {
-    try {
-        // Load price trends
-        const trendsResponse = await fetch(`${API_BASE_URL}/trends/pricing`);
-        if (trendsResponse.ok) {
-            const trendsData = await trendsResponse.json();
-            updatePriceTrendsChart(trendsData);
-        }
+// Update charts with current data
+function updateCharts() {
+    if (currentFlightData.length === 0) {
+        updateChartsWithSampleData();
+        return;
+    }
+    
+    // Update route chart
+    const routeData = {};
+    currentFlightData.forEach(flight => {
+        routeData[flight.route] = (routeData[flight.route] || 0) + 1;
+    });
+    
+    const topRoutes = Object.entries(routeData)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 8);
+    
+    routeChart.data.labels = topRoutes.map(([route]) => route);
+    routeChart.data.datasets[0].data = topRoutes.map(([,count]) => count);
+    routeChart.update();
+    
+    // Update airline chart
+    const airlineData = {};
+    currentFlightData.forEach(flight => {
+        airlineData[flight.airline] = (airlineData[flight.airline] || 0) + 1;
+    });
+    
+    const topAirlines = Object.entries(airlineData)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 8);
+    
+    airlineChart.data.labels = topAirlines.map(([airline]) => airline);
+    airlineChart.data.datasets[0].data = topAirlines.map(([,count]) => count);
+    airlineChart.update();
+    
+    // Update price chart (simulate time series)
+    const priceData = generatePriceTrend();
+    priceChart.data.labels = priceData.labels;
+    priceChart.data.datasets[0].data = priceData.data;
+    priceChart.update();
+}
+
+// Update charts with sample data when no real data is available
+function updateChartsWithSampleData() {
+    // Sample route data
+    const sampleRoutes = ['JFK-LAX', 'ORD-LAS', 'DFW-DEN', 'BOS-SFO', 'MIA-LGA', 'ATL-PHX', 'SEA-IAD', 'EWR-DCA'];
+    const sampleRouteCounts = [45, 38, 32, 28, 25, 22, 18, 15];
+    
+    routeChart.data.labels = sampleRoutes;
+    routeChart.data.datasets[0].data = sampleRouteCounts;
+    routeChart.update();
+    
+    // Sample airline data
+    const sampleAirlines = ['American Airlines', 'Delta Air Lines', 'United Airlines', 'Southwest Airlines', 'JetBlue Airways', 'Alaska Airlines'];
+    const sampleAirlineCounts = [28, 25, 22, 15, 12, 8];
+    
+    airlineChart.data.labels = sampleAirlines;
+    airlineChart.data.datasets[0].data = sampleAirlineCounts;
+    airlineChart.update();
+    
+    // Sample price trend
+    const priceData = generatePriceTrend();
+    priceChart.data.labels = priceData.labels;
+    priceChart.data.datasets[0].data = priceData.data;
+    priceChart.update();
+}
+
+// Generate price trend data
+function generatePriceTrend() {
+    const labels = [];
+    const data = [];
+    const basePrice = 450;
+    
+    for (let i = 30; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
         
-        // Update route chart with popular routes data
-        if (allRoutes.length > 0) {
-            updateRouteChart(allRoutes);
+        // Generate realistic price fluctuation
+        const variation = (Math.random() - 0.5) * 100;
+        const seasonalEffect = Math.sin(i * 0.1) * 50;
+        const price = Math.max(200, basePrice + variation + seasonalEffect);
+        data.push(Math.round(price));
+    }
+    
+    return { labels, data };
+}
+
+// Update flight table
+function updateFlightTable() {
+    const tableBody = document.getElementById('flightTableBody');
+    const displayData = currentFlightData.slice(0, 20); // Show first 20 flights
+    
+    if (displayData.length === 0) {
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center text-muted">
+                    No flight data available. Click "Load Data" to fetch flights.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tableBody.innerHTML = displayData.map(flight => `
+        <tr>
+            <td><strong>${flight.flight_number}</strong></td>
+            <td>${flight.route}</td>
+            <td>${flight.airline}</td>
+            <td>${flight.departure_time}</td>
+            <td>${flight.arrival_time}</td>
+            <td><strong>$${flight.price}</strong></td>
+            <td><span class="badge ${getStatusBadgeClass(flight.status)}">${flight.status}</span></td>
+        </tr>
+    `).join('');
+}
+
+// Update top routes section
+function updateTopRoutes() {
+    const topRoutesContainer = document.getElementById('topRoutes');
+    
+    if (currentFlightData.length === 0) {
+        topRoutesContainer.innerHTML = `
+            <div class="route-item">
+                <div class="route-info">
+                    <div class="route-name">JFK-LAX</div>
+                    <div class="route-stats">45 flights • Popular</div>
+                </div>
+                <div class="route-badge">85%</div>
+            </div>
+            <div class="route-item">
+                <div class="route-info">
+                    <div class="route-name">ORD-LAS</div>
+                    <div class="route-stats">38 flights • High demand</div>
+                </div>
+                <div class="route-badge">78%</div>
+            </div>
+            <div class="route-item">
+                <div class="route-info">
+                    <div class="route-name">DFW-DEN</div>
+                    <div class="route-stats">32 flights • Moderate</div>
+                </div>
+                <div class="route-badge">72%</div>
+            </div>
+        `;
+        return;
+    }
+    
+    const routeStats = {};
+    currentFlightData.forEach(flight => {
+        if (!routeStats[flight.route]) {
+            routeStats[flight.route] = {
+                count: 0,
+                totalPrice: 0,
+                flights: []
+            };
         }
+        routeStats[flight.route].count++;
+        routeStats[flight.route].totalPrice += flight.price;
+        routeStats[flight.route].flights.push(flight);
+    });
+    
+    const topRoutes = Object.entries(routeStats)
+        .sort(([,a], [,b]) => b.count - a.count)
+        .slice(0, 5);
+    
+    topRoutesContainer.innerHTML = topRoutes.map(([route, stats]) => {
+        const avgPrice = Math.round(stats.totalPrice / stats.count);
+        const popularity = Math.round((stats.count / currentFlightData.length) * 100);
         
-    } catch (error) {
-        console.error('Error loading initial data:', error);
+        return `
+            <div class="route-item">
+                <div class="route-info">
+                    <div class="route-name">${route}</div>
+                    <div class="route-stats">${stats.count} flights • Avg $${avgPrice}</div>
+                </div>
+                <div class="route-badge">${popularity}%</div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Get status badge class
+function getStatusBadgeClass(status) {
+    switch (status) {
+        case 'On Time': return 'badge-success';
+        case 'Delayed': return 'badge-warning';
+        case 'Boarding': return 'badge-info';
+        case 'Departed': return 'badge-info';
+        default: return 'badge-secondary';
     }
 }
 
-// Update price trends chart
-function updatePriceTrendsChart(data) {
-    if (!data || !data.trends) return;
-    
-    const labels = data.trends.map(item => item.date);
-    const prices = data.trends.map(item => item.avg_price);
-    
-    priceChart.data.labels = labels;
-    priceChart.data.datasets[0].data = prices;
-    priceChart.update();
+// Load initial sample data
+function loadSampleData() {
+    currentFlightData = generateSampleData(50);
+    updateDashboard();
 }
 
-// Update price chart with flight data
-function updatePriceChart(flights) {
-    if (!flights || flights.length === 0) return;
-    
-    // Group flights by airline and calculate average price
-    const airlineData = {};
-    flights.forEach(flight => {
-        if (!airlineData[flight.airline]) {
-            airlineData[flight.airline] = {
-                total: 0,
-                count: 0
-            };
+// Load initial data from API
+async function loadInitialData() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/flights/search`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                origin: 'JFK',
+                destination: 'LAX',
+                date: new Date().toISOString().split('T')[0]
+            })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.flights && data.flights.length > 0) {
+                currentFlightData = data.flights;
+                updateDashboard();
+            }
         }
-        airlineData[flight.airline].total += parseFloat(flight.price);
-        airlineData[flight.airline].count++;
-    });
-    
-    const labels = Object.keys(airlineData);
-    const prices = labels.map(airline => 
-        Math.round(airlineData[airline].total / airlineData[airline].count)
-    );
-    
-    priceChart.data.labels = labels;
-    priceChart.data.datasets[0].data = prices;
-    priceChart.update();
+    } catch (error) {
+        console.error('Error loading initial data:', error);
+        // Sample data is already loaded in loadSampleData()
+    }
 }
 
-// Update route chart
-function updateRouteChart(routes) {
-    if (!routes || routes.length === 0) return;
+// Clear filters
+function clearFilters() {
+    document.getElementById('fromAirport').value = '';
+    document.getElementById('toAirport').value = '';
+    document.getElementById('dataLimit').value = '50';
     
-    const labels = routes.slice(0, 5).map(route => route.route);
-    const data = routes.slice(0, 5).map(route => route.flights);
-    
-    routeChart.data.labels = labels;
-    routeChart.data.datasets[0].data = data;
-    routeChart.update();
+    // Reset to sample data
+    loadSampleData();
 }
 
-// Show loading state
-function showLoadingState(containerId) {
-    const container = document.getElementById(containerId);
-    container.innerHTML = `
-        <div class="loading-state">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <p class="mt-2">Loading...</p>
-        </div>
-    `;
+// Export data
+function exportData() {
+    if (currentFlightData.length === 0) {
+        alert('No data to export. Please load some flight data first.');
+        return;
+    }
+    
+    const csvContent = convertToCSV(currentFlightData);
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.setAttribute('hidden', '');
+    a.setAttribute('href', url);
+    a.setAttribute('download', 'airline_data.csv');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 }
 
-// Show error state
-function showErrorState(containerId, message) {
-    const container = document.getElementById(containerId);
-    container.innerHTML = `
-        <div class="text-center py-5">
-            <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
-            <h5>Error</h5>
-            <p class="text-muted">${message}</p>
-            <button class="btn btn-primary btn-sm" onclick="location.reload()">
-                <i class="fas fa-redo me-2"></i>
-                Retry
-            </button>
-        </div>
-    `;
+// Convert data to CSV
+function convertToCSV(data) {
+    const headers = ['Flight Number', 'Airline', 'Route', 'Departure', 'Arrival', 'Price', 'Status'];
+    const csvContent = [
+        headers.join(','),
+        ...data.map(flight => [
+            flight.flight_number,
+            flight.airline,
+            flight.route,
+            flight.departure_time,
+            flight.arrival_time,
+            flight.price,
+            flight.status
+        ].join(','))
+    ].join('\n');
+    
+    return csvContent;
+}
+
+// Refresh data
+function refreshData() {
+    loadFilteredData();
+}
+
+// Show loading overlay
+function showLoading() {
+    document.getElementById('loadingOverlay').classList.add('show');
+}
+
+// Hide loading overlay
+function hideLoading() {
+    document.getElementById('loadingOverlay').classList.remove('show');
 }
 
 // Utility functions
@@ -486,26 +585,13 @@ function formatDate(dateString) {
     });
 }
 
-function formatTime(timeString) {
-    return new Date(`2000-01-01T${timeString}`).toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-}
+// Error handling
+window.addEventListener('error', function(e) {
+    console.error('Application error:', e.error);
+    hideLoading();
+});
 
-// Error handling for API calls
-function handleApiError(error, context) {
-    console.error(`API Error in ${context}:`, error);
-    
-    // Show user-friendly error message
-    const errorMessage = error.message || 'An unexpected error occurred';
-    
-    // You could implement toast notifications here
-    // For now, we'll just log to console
-    console.warn(`User notification: ${errorMessage}`);
-}
-
-// Initialize tooltips (if using Bootstrap)
+// Initialize tooltips if needed
 function initializeTooltips() {
     const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.map(function (tooltipTriggerEl) {
